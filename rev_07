@@ -1,0 +1,68 @@
+#include <Wire.h>
+#include <U8g2lib.h>
+#include <Encoder.h>
+#include <TimerOne.h>
+
+// Definisci i pin dell'encoder
+const int encoderPinA = 2;
+const int encoderPinB = 3;
+const int encoderButton = 4;
+
+// Definisci il pin dell'uscita dell'onda quadra
+const int squareWavePin = 9;
+
+// Inizializza il display OLED
+U8G2_SH1106_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0, /* clock=*/ SCL, /* data=*/ SDA, /* reset=*/ U8X8_PIN_NONE);
+
+// Inizializza l'encoder
+Encoder myEnc(encoderPinA, encoderPinB);
+
+// Variabili per frequenza e duty cycle
+volatile int frequency = 1000; // Frequenza iniziale in Hz
+volatile int dutyCycle = 50;   // Duty cycle iniziale in %
+long oldPosition = -999;
+
+void setup() {
+  pinMode(squareWavePin, OUTPUT);
+  pinMode(encoderButton, INPUT_PULLUP);
+
+  u8g2.begin();
+  u8g2.clearBuffer();
+
+  Timer1.initialize(1000000 / frequency); // Imposta la frequenza iniziale
+  Timer1.pwm(squareWavePin, 512); // Duty cycle iniziale al 50%
+}
+
+void loop() {
+  // Legge il valore dell'encoder
+  long newPosition = myEnc.read() / 4; // dividi per 4 se il tuo encoder ha 4 incrementi per scatto
+
+  if (newPosition != oldPosition) {
+    if (digitalRead(encoderButton) == LOW) {
+      // Cambia il duty cycle
+      dutyCycle = constrain(newPosition, 0, 100);
+      Timer1.setPwmDuty(squareWavePin, map(dutyCycle, 0, 100, 0, 1023));
+    } else {
+      // Cambia la frequenza di 10Hz per volta
+      frequency = constrain(10 * newPosition, 10, 2000);
+      Timer1.setPeriod(1000000 / frequency);
+      Timer1.setPwmDuty(squareWavePin, map(dutyCycle, 0, 100, 0, 1023)); // Aggiorna il duty cycle
+    }
+    oldPosition = newPosition;
+  }
+
+  // Aggiorna il display OLED
+  u8g2.clearBuffer();
+  u8g2.setFont(u8g2_font_ncenB08_tr);
+  
+  char buffer[20];
+  sprintf(buffer, "Freq: %d Hz", frequency);
+  u8g2.drawStr(0, 10, buffer);
+
+  sprintf(buffer, "Duty: %d %%", dutyCycle);
+  u8g2.drawStr(0, 30, buffer);
+
+  u8g2.sendBuffer();
+
+  delay(100); // Ritardo per la lettura dell'encoder
+}
